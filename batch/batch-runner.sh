@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# career-ops batch runner — standalone orchestrator for claude -p workers
-# Reads batch-input.tsv, delegates each offer to a claude -p worker,
+# career-ops batch runner — standalone orchestrator for Codex/Claude workers
+# Reads batch-input.tsv, delegates each offer to a non-interactive agent worker,
 # tracks state in batch-state.tsv for resumability.
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -25,11 +25,16 @@ DRY_RUN=false
 RETRY_FAILED=false
 START_FROM=0
 MAX_RETRIES=2
+AGENT_CLI="${CAREER_OPS_AGENT_CLI:-}"
 
 usage() {
   cat <<'USAGE'
-career-ops batch runner — process job offers in batch via claude -p workers
-Uses your default Claude model (Claude Max subscription).
+career-ops batch runner — process job offers in batch via Codex or Claude workers
+
+Agent CLI selection:
+  1. CAREER_OPS_AGENT_CLI if set (`codex` or `claude`)
+  2. `codex` if available
+  3. `claude` if available
 
 Usage: batch-runner.sh [OPTIONS]
 
@@ -61,6 +66,25 @@ Examples:
   # Process 2 at a time starting from ID 10
   ./batch-runner.sh --parallel 2 --start-from 10
 USAGE
+}
+
+detect_agent_cli() {
+  if [[ -n "$AGENT_CLI" ]]; then
+    case "$AGENT_CLI" in
+      codex|claude) ;;
+      *)
+        echo "ERROR: Unsupported CAREER_OPS_AGENT_CLI '$AGENT_CLI'. Use 'codex' or 'claude'."
+        exit 1
+        ;;
+    esac
+  elif command -v codex &>/dev/null; then
+    AGENT_CLI="codex"
+  elif command -v claude &>/dev/null; then
+    AGENT_CLI="claude"
+  else
+    echo "ERROR: Neither 'codex' nor 'claude' CLI was found in PATH."
+    exit 1
+  fi
 }
 
 # Parse arguments
@@ -114,11 +138,7 @@ check_prerequisites() {
     exit 1
   fi
 
-  if ! command -v claude &>/dev/null; then
-    echo "ERROR: 'claude' CLI not found in PATH."
-    exit 1
-  fi
-
+  detect_agent_cli
   mkdir -p "$LOGS_DIR" "$TRACKER_DIR" "$REPORTS_DIR"
 }
 
@@ -306,16 +326,34 @@ process_offer() {
     -e "s|{{ID}}|${id}|g" \
     "$PROMPT_FILE" > "$resolved_prompt"
 
-  # Launch claude -p worker (uses default model from Claude Max subscription)
-  local exit_code=0
-  claude -p \
-    --dangerously-skip-permissions \
-    --append-system-prompt-file "$resolved_prompt" \
-    "$prompt" \
-    > "$log_file" 2>&1 || exit_code=$?
+  local worker_input="$LOGS_DIR/${report_num}-${id}.prompt.md"
+  cp "$resolved_prompt" "$worker_input"
+  printf '\n\n---\n\n%s\n' "$prompt" >> "$worker_input"
 
-  # Cleanup resolved prompt
-  rm -f "$resolved_prompt"
+  local response_file="$LOGS_DIR/${report_num}-${id}.response.txt"
+
+  # Launch worker using the detected agent CLI.
+  local exit_code=0
+  if [[ "$AGENT_CLI" == "codex" ]]; then
+    codex exec \
+      --full-auto \
+      --search \
+      --skip-git-repo-check \
+      -C "$PROJECT_DIR" \
+      -o "$response_file" \
+      - < "$worker_input" \
+      > "$log_file" 2>&1 || exit_code=$?
+  else
+    claude -p \
+      --dangerously-skip-permissions \
+      --append-system-prompt-file "$resolved_prompt" \
+      "$prompt" \
+      > "$log_file" 2>&1 || exit_code=$?
+    cp "$log_file" "$response_file"
+  fi
+
+  # Cleanup transient prompt inputs
+  rm -f "$resolved_prompt" "$worker_input"
 
   local completed_at
   completed_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
@@ -324,7 +362,7 @@ process_offer() {
     # Try to extract score from worker output
     local score="-"
     local score_match
-    score_match=$(grep -oP '"score":\s*[\d.]+' "$log_file" 2>/dev/null | head -1 | grep -oP '[\d.]+' || true)
+    score_match=$(grep -oP '"score":\s*[\d.]+' "$response_file" 2>/dev/null | head -1 | grep -oP '[\d.]+' || true)
     if [[ -n "$score_match" ]]; then
       score="$score_match"
     fi

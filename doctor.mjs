@@ -8,6 +8,7 @@
 import { existsSync, mkdirSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { spawnSync } from 'child_process';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const projectRoot = __dirname;
@@ -38,6 +39,28 @@ function checkDependencies() {
     pass: false,
     label: 'Dependencies not installed',
     fix: 'Run: npm install',
+  };
+}
+
+function hasCommand(command) {
+  const result = spawnSync('sh', ['-c', `command -v ${command}`], { stdio: 'ignore' });
+  return result.status === 0;
+}
+
+function checkAgentCli() {
+  if (hasCommand('codex')) {
+    return { pass: true, label: 'Codex CLI found' };
+  }
+  if (hasCommand('claude')) {
+    return { pass: true, label: 'Claude CLI found' };
+  }
+  return {
+    pass: false,
+    label: 'No supported agent CLI found',
+    fix: [
+      'Install Codex CLI (`codex`) or Claude Code CLI (`claude`)',
+      'This fork is optimized for Codex and keeps Claude compatibility',
+    ],
   };
 }
 
@@ -155,6 +178,7 @@ async function main() {
 
   const checks = [
     checkNodeVersion(),
+    checkAgentCli(),
     checkDependencies(),
     await checkPlaywright(),
     checkCv(),
@@ -186,7 +210,7 @@ async function main() {
     console.log(`Result: ${failures} issue${failures === 1 ? '' : 's'} found. Fix them and run \`npm run doctor\` again.`);
     process.exit(1);
   } else {
-    console.log('Result: All checks passed. You\'re ready to go! Run `claude` to start.');
+    console.log('Result: All checks passed. You\'re ready to go! Run `codex` (or `claude`) to start.');
     process.exit(0);
   }
 }

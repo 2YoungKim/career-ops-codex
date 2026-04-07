@@ -49,24 +49,13 @@ The negotiation section provides frameworks for salary discussions. Replace the 
 - Geographic arbitrage strategy
 - Pushback responses
 
-## Hooks (Optional)
+## Agent Configuration
 
-Career-ops can integrate with external systems via Claude Code hooks. Example hooks:
+- `AGENTS.md`: Codex-facing project instructions
+- `.agents/skills/career-ops/SKILL.md`: Codex router for `/career-ops`
+- `CLAUDE.md`: Claude-compatible instructions kept for upstream parity
 
-```json
-{
-  "hooks": {
-    "SessionStart": [{
-      "hooks": [{
-        "type": "command",
-        "command": "echo 'Career-ops session started'"
-      }]
-    }]
-  }
-}
-```
-
-Save hooks in `.claude/settings.json`.
+If you use Claude-specific hooks, keep them in `.claude/settings.json`. Codex behavior in this fork is driven by `AGENTS.md` and `.agents/skills/`.
 
 ## States (templates/states.yml)
 

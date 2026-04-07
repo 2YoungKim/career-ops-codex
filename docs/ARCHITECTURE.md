@@ -4,8 +4,9 @@
 
 ```
                     ┌─────────────────────────────────┐
-                    │         Claude Code Agent        │
-                    │   (reads CLAUDE.md + modes/*.md) │
+                    │        Codex / Claude Agent      │
+                    │ (reads AGENTS.md or CLAUDE.md +  │
+                    │            modes/*.md)           │
                     └──────────┬──────────────────────┘
                                │
             ┌──────────────────┼──────────────────────┐
@@ -15,10 +16,11 @@
      │ (auto-pipe)  │   │  (scan.md)  │   │   (batch-runner)   │
      └──────┬──────┘   └──────┬──────┘   └───────────┬────────┘
             │                  │                       │
-            │           ┌──────▼──────┐          ┌────▼─────┐
-            │           │ pipeline.md │          │ N workers│
-            │           │ (URL inbox) │          │ (claude -p)
-            │           └─────────────┘          └────┬─────┘
+            │           ┌──────▼──────┐          ┌────▼────────────────┐
+            │           │ pipeline.md │          │ N workers           │
+            │           │ (URL inbox) │          │ (codex exec /       │
+            │           └─────────────┘          │  claude -p)         │
+            │                                    └────┬────────────────┘
             │                                          │
      ┌──────▼──────────────────────────────────────────▼──────┐
      │                    Output Pipeline                      │
@@ -56,14 +58,14 @@
 The batch system processes multiple offers in parallel:
 
 ```
-batch-input.tsv    →  batch-runner.sh  →  N × claude -p workers
+batch-input.tsv    →  batch-runner.sh  →  N × codex exec / claude -p workers
 (id, url, source)     (orchestrator)       (self-contained prompt)
                            │
                     batch-state.tsv
                     (tracks progress)
 ```
 
-Each worker is a headless Claude instance (`claude -p`) that receives the full `batch-prompt.md` as context. Workers produce:
+Each worker is a headless agent process (`codex exec` by default, `claude -p` as fallback) that receives the full `batch-prompt.md` as context. Workers produce:
 - Report .md
 - PDF
 - Tracker TSV line

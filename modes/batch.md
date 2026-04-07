@@ -1,25 +1,25 @@
 # Modo: batch — Procesamiento Masivo de Ofertas
 
-Dos modos de uso: **conductor --chrome** (navega portales en tiempo real) o **standalone** (script para URLs ya recolectadas).
+Dos modos de uso: **conductor interactivo** (navega portales en tiempo real) o **standalone** (script para URLs ya recolectadas).
 
 ## Arquitectura
 
 ```
-Claude Conductor (claude --chrome --dangerously-skip-permissions)
+Agente conductor interactivo (Codex o Claude)
   │
   │  Chrome: navega portales (sesiones logueadas)
   │  Lee DOM directo — el usuario ve todo en tiempo real
   │
   ├─ Oferta 1: lee JD del DOM + URL
-  │    └─► claude -p worker → report .md + PDF + tracker-line
+  │    └─► worker (`codex exec` o `claude -p`) → report .md + PDF + tracker-line
   │
   ├─ Oferta 2: click siguiente, lee JD + URL
-  │    └─► claude -p worker → report .md + PDF + tracker-line
+  │    └─► worker (`codex exec` o `claude -p`) → report .md + PDF + tracker-line
   │
   └─ Fin: merge tracker-additions → applications.md + resumen
 ```
 
-Cada worker es un `claude -p` hijo con contexto limpio de 200K tokens. El conductor solo orquesta.
+Cada worker es un proceso hijo aislado (`codex exec` por defecto, `claude -p` como fallback). El conductor solo orquesta.
 
 ## Archivos
 
@@ -44,9 +44,7 @@ batch/
    c. Calcular siguiente REPORT_NUM secuencial
    d. Ejecutar via Bash:
       ```bash
-      claude -p --dangerously-skip-permissions \
-        --append-system-prompt-file batch/batch-prompt.md \
-        "Procesa esta oferta. URL: {url}. JD: /tmp/batch-jd-{id}.txt. Report: {num}. ID: {id}"
+      CAREER_OPS_AGENT_CLI=codex batch/batch-runner.sh
       ```
    e. Actualizar `batch-state.tsv` (completed/failed + score + report_num)
    f. Log a `logs/{report_num}-{id}.log`
@@ -82,7 +80,7 @@ id	url	status	started_at	completed_at	report_num	score	error	retries
 - Lock file (`batch-runner.pid`) previene ejecución doble
 - Cada worker es independiente: fallo en oferta #47 no afecta a las demás
 
-## Workers (claude -p)
+## Workers
 
 Cada worker recibe `batch-prompt.md` como system prompt. Es self-contained.
 
